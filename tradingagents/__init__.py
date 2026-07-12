@@ -1,5 +1,7 @@
 import contextlib
 import warnings
+import os
+import yfinance as yf
 
 # Load .env files at package import so DEFAULT_CONFIG's env-var overlay
 # (and every llm_clients consumer) sees the user's keys regardless of
@@ -13,8 +15,16 @@ try:
 
     load_dotenv(find_dotenv(usecwd=True))
     load_dotenv(find_dotenv(".env.enterprise", usecwd=True), override=False)
+
 except ImportError:
     pass
+
+import yfinance as yf
+
+yfinance_proxy = os.getenv("YFINANCE_PROXY")
+
+if yfinance_proxy:
+    yf.config.network.proxy = yfinance_proxy
 
 # langchain-core 1.3.3 calls surface_langchain_deprecation_warnings() in
 # its own __init__, which prepends default-action filters for its
