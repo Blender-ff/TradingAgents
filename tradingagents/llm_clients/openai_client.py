@@ -173,11 +173,19 @@ _PASSTHROUGH_KWARGS = (
 # "Unsupported parameter: 'reasoning.effort' is not supported with this model".
 # Drop the kwarg for those rather than crash the run.
 _OPENAI_REASONING_MODEL = re.compile(r"^(gpt-5|o[1-9])")
+_GLM_REASONING_EFFORT_MODELS = {"glm-5", "glm-5.1", "glm-5.2"}
 
 
 def _supports_reasoning_effort(model: str) -> bool:
-    """Whether the (native OpenAI) model accepts ``reasoning_effort``."""
-    return bool(_OPENAI_REASONING_MODEL.match(model.lower().strip()))
+    """Whether a known model accepts ``reasoning_effort``.
+
+    Alibaba Model Studio documents this parameter for GLM-5/5.1/5.2 on its
+    OpenAI-compatible endpoint, in addition to native OpenAI reasoning models.
+    """
+    normalized = model.lower().strip().rsplit("/", 1)[-1]
+    return bool(_OPENAI_REASONING_MODEL.match(normalized)) or (
+        normalized in _GLM_REASONING_EFFORT_MODELS
+    )
 
 
 @dataclass(frozen=True)

@@ -91,24 +91,30 @@ class TradingAgentsGraph:
         os.makedirs(self.config["data_cache_dir"], exist_ok=True)
         os.makedirs(self.config["results_dir"], exist_ok=True)
 
-        # Initialize LLMs with provider-specific thinking configuration
-        llm_kwargs = self._get_provider_kwargs()
+        # Initialize the two LLM tiers with independent reasoning strengths.
+        # Cross-provider settings (temperature/retries/callbacks) remain shared.
+        deep_llm_kwargs = self._get_provider_kwargs(
+            self.config.get("deep_think_reasoning_effort")
+        )
+        quick_llm_kwargs = self._get_provider_kwargs(
+            self.config.get("quick_think_reasoning_effort")
+        )
 
-        # Add callbacks to kwargs if provided (passed to LLM constructor)
         if self.callbacks:
-            llm_kwargs["callbacks"] = self.callbacks
+            deep_llm_kwargs["callbacks"] = self.callbacks
+            quick_llm_kwargs["callbacks"] = self.callbacks
 
         deep_client = create_llm_client(
             provider=self.config["llm_provider"],
             model=self.config["deep_think_llm"],
             base_url=self.config.get("backend_url"),
-            **llm_kwargs,
+            **deep_llm_kwargs,
         )
         quick_client = create_llm_client(
             provider=self.config["llm_provider"],
             model=self.config["quick_think_llm"],
             base_url=self.config.get("backend_url"),
-            **llm_kwargs,
+            **quick_llm_kwargs,
         )
 
         self.deep_thinking_llm = deep_client.get_llm()
@@ -150,8 +156,15 @@ class TradingAgentsGraph:
         self.graph = self.workflow.compile()
         self._checkpointer_ctx = None
 
-    def _get_provider_kwargs(self) -> dict[str, Any]:
-        """Get provider-specific kwargs for LLM client creation."""
+    def _get_provider_kwargs(
+        self, reasoning_effort: str | None = None
+    ) -> dict[str, Any]:
+        """Get kwargs for one LLM tier.
+
+        A tier-specific ``reasoning_effort`` wins over the legacy provider-wide
+        value. The OpenAI-compatible client performs the final model capability
+        check before putting the parameter on the wire.
+        """
         kwargs = {}
         provider = self.config.get("llm_provider", "").lower()
 
@@ -160,10 +173,12 @@ class TradingAgentsGraph:
             if thinking_level:
                 kwargs["thinking_level"] = thinking_level
 
-        elif provider == "openai":
-            reasoning_effort = self.config.get("openai_reasoning_effort")
-            if reasoning_effort:
-                kwargs["reasoning_effort"] = reasoning_effort
+        elif provider in {"openai", "openai_compatible", "glm", "glm-cn"}:
+            resolved_effort = reasoning_effort or self.config.get(
+                "openai_reasoning_effort"
+            )
+            if resolved_effort:
+                kwargs["reasoning_effort"] = resolved_effort
 
         elif provider == "anthropic":
             effort = self.config.get("anthropic_effort")
